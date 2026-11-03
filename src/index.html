@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8">
+<title>Warehouse Live Simulator</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+:root{--bg:#f4f6f9;--card:#fff;--ink:#1b2a41;--mute:#667085;--line:#d9dee7;--teal:#00a7a7;--blue:#5b9bd5;--orange:#ed7d31;--red:#d92d20;--green:#12b76a;--amber:#f79009;--purple:#7a5af8}
+*{box-sizing:border-box}body{margin:0;font:13px/1.4 Segoe UI,system-ui,sans-serif;background:var(--bg);color:var(--ink)}
+header{background:#14233b;color:#fff;padding:8px 16px;display:flex;align-items:center;gap:16px;flex-wrap:wrap}
+header h1{font-size:16px;margin:0;font-weight:600}header .sub{color:#9fb3d1;font-size:12px}
+nav{display:flex;gap:2px;margin-left:auto}nav button{background:transparent;color:#cfd9ea;border:0;padding:7px 14px;cursor:pointer;border-radius:6px 6px 0 0;font:inherit}
+nav button.on{background:var(--bg);color:var(--ink);font-weight:600}
+main{padding:12px 16px;max-width:1500px;margin:auto}.tab{display:none}.tab.on{display:block}
+.card{background:var(--card);border:1px solid var(--line);border-radius:8px;padding:10px 12px;margin-bottom:12px}
+.card h3{margin:0 0 8px;font-size:13px;text-transform:uppercase;letter-spacing:.04em;color:var(--mute)}
+.bar{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+button.b,select,input[type=text],input[type=number]{font:inherit;border:1px solid var(--line);border-radius:6px;padding:5px 10px;background:#fff;color:var(--ink)}
+button.b{cursor:pointer;background:#fff}button.b:hover{background:#eef2f7}button.pri{background:var(--teal);border-color:var(--teal);color:#fff;font-weight:600}button.pri:hover{background:#008f8f}
+button.warn{background:var(--orange);border-color:var(--orange);color:#fff}
+input[type=number]{width:90px}input[type=range]{width:100%}
+.grid{display:grid;gap:12px}.g2{grid-template-columns:1fr 1fr}.g3{grid-template-columns:repeat(3,1fr)}.livegrid{grid-template-columns:minmax(0,1fr) 300px}
+@media(max-width:1100px){.livegrid,.g2,.g3{grid-template-columns:1fr}}
+canvas{width:100%;display:block;background:#fff;border-radius:6px}
+.kpis{display:grid;grid-template-columns:1fr 1fr;gap:6px}.kpi{border:1px solid var(--line);border-radius:6px;padding:6px 8px}.kpi b{display:block;font-size:18px}.kpi span{color:var(--mute);font-size:11px}
+.kpi.bad b{color:var(--red)}.kpi.ok b{color:var(--green)}.kpi.warn b{color:var(--amber)}
+table{border-collapse:collapse;width:100%;font-size:12px}th,td{border-bottom:1px solid var(--line);padding:4px 6px;text-align:right;white-space:nowrap}th{background:#f0f3f8;position:sticky;top:0;text-align:right}th:first-child,td:first-child{text-align:left}th.flowh{background:#dbe9f7}th.stockh{background:#d3f0ee}
+td.l,th.l{text-align:left}.scroll{max-height:420px;overflow:auto;border:1px solid var(--line);border-radius:6px}
+.tag{display:inline-block;padding:1px 8px;border-radius:10px;font-size:11px;font-weight:600;color:#fff}.tag.pass{background:var(--green)}.tag.fail{background:var(--red)}.tag.mid{background:var(--amber)}
+.log{height:230px;overflow:auto;font-size:12px;border:1px solid var(--line);border-radius:6px;padding:4px 6px;background:#fbfcfe}.log div{padding:1px 0;border-bottom:1px dotted #eee}
+.log .breach{color:var(--red)}.log .backlog{color:var(--amber)}.log .clear{color:var(--green)}.log .demand{color:var(--blue)}.log .done{font-weight:600}
+.msg{padding:6px 10px;border-radius:6px;margin:4px 0;font-size:12px}.msg.err{background:#fee4e2;color:#912018}.msg.warn{background:#fef0c7;color:#93370d}.msg.okk{background:#d1fadf;color:#05603a}
+.inp{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:6px 14px}.inp label{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.hbar{height:10px;background:#e8edf4;border-radius:5px;overflow:hidden;display:flex}.hbar i{display:block;height:100%}
+.small{font-size:11px;color:var(--mute)}h2{font-size:15px;margin:8px 0}
+.legend span{margin-right:12px;font-size:11px}.legend i{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:4px;vertical-align:-1px}
+img.layout{max-width:100%;border:1px solid var(--line);border-radius:6px;background:#fff}
+</style>
+</head>
+<body>
+<header>
+  <div><h1>Warehouse Live Simulator</h1><div class="sub">Flow · stock capacity · dwell time — BRD v1.0 (discrete-event, shared F7 / F7-REPL / F9 pool)</div></div>
+  <nav id="nav"></nav>
+</header>
+<main>
+<!-- LIVE -->
+<section class="tab on" id="tab-live">
+  <div class="card bar">
+    <button class="b pri" id="btnRun">▶ Start</button>
+    <button class="b" id="btnStep">Step 1 hr</button>
+    <button class="b" id="btnEnd">Run to end</button>
+    <button class="b" id="btnReset">↺ Reset</button>
+    <label>Speed <select id="speed"></select></label>
+    <label>Chart window <select id="win"><option value="0">All</option><option value="24">24 h</option><option value="48">48 h</option></select></label>
+    <label title="A = whole people needed in each hour (rounded up, worst case). B = average people / FTE (not rounded).">People view <select id="pplMode"><option value="A">A · whole people (worst case)</option><option value="B">B · average FTE</option></select></label>
+    <span id="clock" style="font-weight:600;font-size:15px;margin-left:8px"></span>
+    <span id="status" class="small"></span>
+    <span style="flex:1"></span>
+    <label class="small">Replay <input type="range" id="scrub" min="0" max="0" value="0" style="width:220px"></label>
+    <button class="b" id="btnLive">Live</button>
+  </div>
+  <div id="valMsgs"></div>
+  <div class="grid livegrid">
+    <div>
+      <div class="card" style="padding:6px"><canvas id="floor" width="1200" height="560"></canvas></div>
+      <div class="grid g2">
+        <div class="card"><h3>Stock occupancy (% of capacity) <button class="b" style="float:right;padding:0 6px" data-png="chartOcc">PNG</button></h3><canvas id="chartOcc" width="700" height="240"></canvas>
+          <div class="legend small" id="legOcc"></div></div>
+        <div class="card"><h3>Shared-pool backlog (pallets) <button class="b" style="float:right;padding:0 6px" data-png="chartBl">PNG</button></h3><canvas id="chartBl" width="700" height="240"></canvas>
+          <div class="legend small" id="legBl"></div></div>
+        <div class="card" style="grid-column:1/-1"><h3>People required per hour (rolling 60 min of work ÷ productivity) <button class="b" style="float:right;padding:0 6px" data-png="chartPpl">PNG</button></h3><canvas id="chartPpl" width="1440" height="240"></canvas><div class="legend small" id="legPpl"></div></div>
+      </div>
+    </div>
+    <div>
+      <div class="card"><h3>Live KPIs</h3><div class="kpis" id="kpis"></div></div>
+      <div class="card"><h3>Event log</h3><div class="log" id="log"></div></div>
+    </div>
+  </div>
+</section>
+
+<!-- SNAPSHOT -->
+<section class="tab" id="tab-snap">
+  <div class="card bar"><b>Static stock &amp; flow at a time of the day</b>
+    <label>Day <input type="number" id="snapDay" min="1" value="1" style="width:70px"></label>
+    <label>Time <input type="range" id="snapTime" min="0" max="1439" step="1" value="480" style="width:360px"></label>
+    <b id="snapClock" style="min-width:90px"></b>
+    <button class="b" id="snapPrev">− 1 hr</button><button class="b" id="snapNext">+ 1 hr</button><button class="b" id="snapNow">Current sim time</button><button class="b pri" id="snapRun">Run simulation to end</button>
+    <span class="small" id="snapMsg"></span></div>
+  <div class="card"><canvas id="diagSnap" width="1320" height="470"></canvas>
+    <div class="small">Stock areas show pallets in stock at that moment (peak so far in the run). Flow boxes show pallets waiting (Q), pallets completed in the 60 minutes before that moment, and the people needed for that work (People view A/B on the Live tab).</div></div>
+</section>
+
+<!-- INPUTS -->
+<section class="tab" id="tab-inputs">
+  <div class="card"><h3>Static stock &amp; flow diagram — capacity view</h3><canvas id="diagInputs" width="1320" height="470"></canvas></div>
+  <div class="card bar"><b>Preset</b><select id="preset"></select><button class="b" id="btnPreset">Load preset</button>
+    <span style="flex:1"></span><button class="b" id="btnExportCfg">Export JSON</button><label class="b" style="cursor:pointer;padding:5px 10px;border:1px solid var(--line);border-radius:6px">Import JSON<input type="file" id="importCfg" accept=".json" hidden></label></div>
+  <div id="inpMsgs"></div>
+  <div class="grid g2">
+    <div class="card"><h3>Run control</h3><div class="inp" id="inpRun"></div></div>
+    <div class="card"><h3>Shared capacity pool · replenishment · overflow</h3><div class="inp" id="inpShared"></div></div>
+  </div>
+  <div class="grid g2">
+    <div class="card"><h3>Area master (capacity / initial stock)</h3><div id="inpAreas"></div></div>
+    <div class="card"><h3>Process master (productivity / resources)</h3><div id="inpProc"></div></div>
+  </div>
+  <div class="card"><h3>24-hour demand profile (repeats every day) with control totals</h3><div id="inpProfile"></div></div>
+</section>
+
+<!-- RESULTS -->
+<section class="tab" id="tab-results">
+  <div class="card bar"><button class="b pri" id="btnRunRes">Run full scenario now</button><span class="small" id="resNote"></span><span style="flex:1"></span><button class="b" id="btnTests">Run BRD self-tests (T01–T12, AC-011)</button></div>
+  <div id="resBody"></div>
+</section>
+
+<!-- LEDGERS -->
+<section class="tab" id="tab-ledger">
+  <div class="card bar"><b>Download (CSV)</b>
+    <button class="b" data-csv="events">Event ledger</button><button class="b" data-csv="queue">Queue ledger</button><button class="b" data-csv="dwell">Dwell report</button>
+    <button class="b" data-csv="hourly">Hourly dashboard</button><button class="b" data-csv="areas">Area report</button><button class="b" data-csv="people">People required</button>
+    <span style="flex:1"></span><input type="text" id="ledFilter" placeholder="filter (cohort / area / process)"><select id="ledWhich"><option value="events">Event ledger</option><option value="queue">Queue ledger</option><option value="dwell">Dwell (cohorts)</option></select></div>
+  <div class="card"><div class="small" id="ledNote"></div><div class="scroll" style="max-height:620px" id="ledTable"></div></div>
+</section>
+
+<!-- SCENARIOS -->
+<section class="tab" id="tab-scen">
+  <div class="grid g2">
+    <div class="card"><h3>Scenario management (FR-001)</h3>
+      <div class="bar"><input type="text" id="scName" placeholder="Scenario name" style="flex:1"><button class="b pri" id="scSave">Save current</button></div>
+      <div id="scList" style="margin-top:8px"></div></div>
+    <div class="card"><h3>Compare two scenarios</h3>
+      <div class="bar"><select id="cmpA"></select> vs <select id="cmpB"></select><button class="b pri" id="cmpGo">Compare</button></div><div id="cmpOut" style="margin-top:8px"></div></div>
+  </div>
+  <div class="card"><h3>Sensitivity batch (FR-015)</h3>
+    <div class="bar"><label>Shared capacities <input type="text" id="sensCap" value="200,230,260,290,320" style="width:200px"></label>
+      <label>S8 initial stock <input type="text" id="sensS8" value="5000,10000" style="width:150px"></label>
+      <button class="b pri" id="sensGo">Run batch</button><span class="small">Runs the current inputs headlessly for each combination.</span></div>
+    <div id="sensOut" style="margin-top:8px"></div></div>
+</section>
+
+<!-- LAYOUT -->
+<section class="tab" id="tab-layout">
+  <div class="card"><h3>Supplied warehouse layout (reference)</h3>
+    <p class="small">Schematic mapping used by the simulator: inbound on the east side (F1–F3 → S4 → F5 → S6 → F7 → S8), outbound on the west side (S8 → F9 → S10 → F11 → S12 → F13 → F14). Replenishment: S8 → F7-REPL → 50 % S6 / 50 % S10 → F17 (manual EPT) → S11. F7, F7-REPL and F9 share one 260 pallets/h pool.</p>
+    <img class="layout" src="layout.png" alt="warehouse layout" onerror="this.outerHTML='<p>Place layout.png next to index.html to show the layout here.</p>'"></div>
+</section>
+</main>
+<script charset="utf-8" src="engine.js"></script>
+<script charset="utf-8" src="app.js"></script>
+</body>
+</html>
+
